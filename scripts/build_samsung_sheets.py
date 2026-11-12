@@ -2,7 +2,7 @@
 
 사용법:  python3 scripts/build_samsung_sheets.py 입력.xlsx 출력.xlsx
 
-- RAW 숫자는 DART 정기보고서(사업의 내용 II-2·3·4, 연결주석 3·20-1)에서 옮긴 값이다.
+- RAW는 DART 정기보고서 표(사업의 내용 II-2·3·4, 연결주석 3·20-1)를 표 모양 그대로 옮긴 것이다.
 - 금액은 원 단위로 저장하고 표시형식(#,##0,,)으로 백만 원을 보여준다.
 - REV·매출추정의 실적 칸은 전부 삼성전기_RAW 셀 하나를 그대로 참조한다.
 """
@@ -14,20 +14,18 @@ from openpyxl.styles.colors import Color
 
 RAW, REV, EST = "삼성전기_RAW", "삼성전기_REV", "삼성전기_매출추정"
 
-# ── RAW 열 배치 (닌텐도 R_REV와 동일: 연간 4개 + 분기 2개 + 빈 열 + 전년 동기 2개)
-PERIODS = ["2022", "2023", "2024", "2025", "1Q26", "2Q26", "1Q25", "2Q25"]
-COL = dict(zip(PERIODS, "CDEFGHJK"))
+# ── RAW 기간 열 (DART 표를 옆으로 이어 붙인 순서). 2분기 열만 계산값(반기 − 1분기).
+PERIOD_COLS = [
+    ("F", "제50기", "('22.01.01~'22.12.31)"), ("G", "제51기", "('23.01.01~'23.12.31)"),
+    ("H", "제52기", "('24.01.01~'24.12.31)"), ("I", "제53기", "('25.01.01~'25.12.31)"),
+    ("J", "제54기 1분기", "('26.01.01~'26.03.31)"), ("K", "제54기 반기", "('26.01.01~'26.06.30)"),
+    ("L", "제54기 2분기", "(반기 − 1분기)"),
+    ("M", "제53기 1분기", "('25.01.01~'25.03.31)"), ("N", "제53기 반기", "('25.01.01~'25.06.30)"),
+    ("O", "제53기 2분기", "(반기 − 1분기)"),
+]
+# REV·매출추정이 참조하는 열
+COL = {"2022": "F", "2023": "G", "2024": "H", "2025": "I", "1Q26": "J", "2Q26": "L", "1Q25": "M", "2Q25": "O"}
 PRIOR = {"2023": "2022", "2024": "2023", "2025": "2024", "1Q26": "1Q25", "2Q26": "2Q25"}
-HEAD = {
-    "2022": ("제50기", "FY24 사업보고서 (재작성)"),
-    "2023": ("제51기", "FY25 사업보고서 (재작성)"),
-    "2024": ("제52기", "FY25 사업보고서"),
-    "2025": ("제53기", "FY25 사업보고서"),
-    "1Q26": ("제54기 1분기 (3M)", "1Q26 분기보고서"),
-    "2Q26": ("제54기 2분기 (3M)", "1H26 반기 − 1Q26"),
-    "1Q25": ("제53기 1분기 (3M)", "1Q25 분기보고서"),
-    "2Q25": ("제53기 2분기 (3M)", "1H25 반기 − 1Q25"),
-}
 N = None  # 미공시
 
 # ── DART 숫자 (금액 단위: 백만 원, 공시 그대로). (a, b)는 반기 누적 a − 1분기 b.
@@ -46,17 +44,21 @@ SALES = {
     "tot_dom": [374110, 447435, 445707, 425509, 96822, (201417, 96822), 116533, (212690, 116533)],
     "tot": [9406610, 8892412, 10294103, 11314459, 3209113, (6666318, 3209113), 2738649, (5523278, 2738649)],
 }
-# 2. 매출유형별 — 부문별: 연결주석 20-1 (분기 열은 3개월 공시값), 합계: II-4 매출 유형별 매출실적
+# 2. 매출 유형별 매출실적 — II-4 (합계) / 3. 부문별 수익 구분 — 연결주석 20-1
 TYPE = {
-    "comp_goods": [N, 3905722, 4443098, 5194938, 1405602, 1643792, 1199835, 1272571],
-    "comp_other": [N, -2700, 18952, 3563, 2896, 5629, 16431, 8145],
-    "pkg_goods": [N, 1460016, 1680718, 1999104, 637832, 699572, 426565, 486809],
-    "pkg_other": [N, 257362, 353939, 302649, 87186, 72059, 72837, 77764],
-    "opt_goods": [N, 3252588, 3747133, 3785921, 1070374, 1028428, 1015179, 926725],
-    "opt_other": [N, 19424, 50263, 28284, 5223, 7725, 7802, 12615],
-    "tot_goods": [9255753, 8618326, 9870949, 10979963, 3113808, 3371792, 2641579, 2686105],
-    "tot_other": [150857, 274086, 423154, 334496, 95305, 85413, 97070, 98524],
+    "comp_goods": [N, 3905722, 4443098, 5194938, 1405602, (3049394, 1405602), 1199835, (2472406, 1199835)],
+    "comp_other": [N, -2700, 18952, 3563, 2896, (8525, 2896), 16431, (24576, 16431)],
+    "comp_sum": [N, 3903022, 4462050, 5198501, 1408498, (3057919, 1408498), 1216266, (2496982, 1216266)],
+    "pkg_goods": [N, 1460016, 1680718, 1999104, 637832, (1337404, 637832), 426565, (913374, 426565)],
+    "pkg_other": [N, 257362, 353939, 302649, 87186, (159245, 87186), 72837, (150601, 72837)],
+    "pkg_sum": [N, 1717378, 2034657, 2301753, 725018, (1496649, 725018), 499402, (1063975, 499402)],
+    "opt_goods": [N, 3252588, 3747133, 3785921, 1070374, (2098802, 1070374), 1015179, (1941904, 1015179)],
+    "opt_other": [N, 19424, 50263, 28284, 5223, (12948, 5223), 7802, (20417, 7802)],
+    "opt_sum": [N, 3272012, 3797396, 3814205, 1075597, (2111750, 1075597), 1022981, (1962321, 1022981)],
+    "tot_goods": [9255753, 8618326, 9870949, 10979963, 3113808, (6485600, 3113808), 2641579, (5327684, 2641579)],
+    "tot_other": [150857, 274086, 423154, 334496, 95305, (180718, 95305), 97070, (195594, 97070)],
 }
+NOTE_TOTAL = [N, 8892412, 10294103, 11314459, 3209113, (6666318, 3209113), 2738649, (5523278, 2738649)]
 # 3. 지역별 매출 — 연결주석 3. 영업부문정보 > 지역에 대한 공시 (전사 기준)
 REGION = {
     "kr_dom": [N, 447435, 445707, 425509, 96823, (201427, 96823), 116530, (212691, 116530)],
@@ -83,6 +85,13 @@ PROD = {
     "pkg_out": [699, 458, 509, 565, 158, (325, 158), 125, (272, 125)],
     "opt_cap": [195, 158, 158, 149, 37, (74, 37), 37, (74, 37)],
     "opt_out": [115, 121, 114, 98, 26, (52, 26), 22, (46, 22)],
+}
+
+# 가동률 — II-3 라 (2). 공시값 그대로 (분기 열은 1분기 / 반기 누적).
+UTIL = {
+    "comp": [0.58, 0.70, 0.81, 0.93, 0.95, 0.91, 0.96, 0.98],
+    "pkg": [0.89, 0.58, 0.65, 0.70, 0.86, 0.89, 0.63, 0.68],
+    "opt": [0.59, 0.76, 0.72, 0.66, 0.71, 0.70, 0.60, 0.62],
 }
 
 # ── 서식 (닌텐도 파일과 동일한 폰트·표시형식)
@@ -137,148 +146,174 @@ def fresh_sheet(wb, title):
 
 
 # ───────────────────────────── 삼성전기_RAW ─────────────────────────────
+# v1처럼 DART 표 모양 그대로 (굴림, 회색 머리글, 실선 테두리). 기간 열만 옆으로 이어 붙인다.
+BOX = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+HEAD_FILL = PatternFill(fill_type="solid", fgColor="FFD7D7D7")
+ZERO_PCT = r"0.0%;\-0.0%;0.0%"
+
+
+def dfont(bold=False, size=11):
+    return Font(name="굴림", size=size, bold=bold, color="FF000000")
+
+
 def build_raw(wb):
     ws = fresh_sheet(wb, RAW)
-    for col, width in {"A": 1.6, "B": 70, "I": 2.5}.items():
+    ws.sheet_view.zoomScale = 85
+    for col, width in {"A": 2.6, "B": 18, "C": 14, "D": 20, "E": 12}.items():
         ws.column_dimensions[col].width = width
-    for col in "CDEFGHJK":
-        ws.column_dimensions[col].width = 14.8
+    for col, *_ in PERIOD_COLS:
+        ws.column_dimensions[col].width = 19
 
     rows = {}  # key -> 행 번호 (REV·매출추정이 참조)
-    state = {"r": 2}
+    state = {"r": 6}
 
-    def nxt():
-        state["r"] += 1
-        return state["r"]
+    def box(rng, value=None, align="center", fil=None, nf=None):
+        """범위를 병합하고 테두리를 두른 칸 하나."""
+        cells = [c for row in ws[rng] for c in row] if ":" in rng else [ws[rng]]
+        for c in cells:
+            c.border, c.font = BOX, dfont()
+            c.alignment = Alignment(horizontal=align, vertical="center", wrap_text=True)
+            if fil:
+                c.fill = fil
+        if len(cells) > 1:
+            ws.merge_cells(rng)
+        if value is not None:
+            cells[0].value = value
+        if nf:
+            cells[0].number_format = nf
 
-    def literal(v, scale):
-        if v is None:
-            return None
-        if isinstance(v, tuple):
-            return f"={v[0] * scale}-{v[1] * scale}"
-        return v * scale
+    def table(title, unit, labels):
+        """표 제목 + 머리글 2행. labels: [(시작열, 끝열, 글자)]"""
+        r = state["r"]
+        ws[f"B{r}"].value, ws[f"B{r}"].font = title, dfont(bold=True)
+        ws[f"O{r}"].value, ws[f"O{r}"].font = unit, dfont()
+        ws[f"O{r}"].alignment = Alignment(horizontal="right")
+        for a, b, text in labels:
+            box(f"{a}{r + 1}:{b}{r + 2}", text, fil=HEAD_FILL)
+        for col, name, span in PERIOD_COLS:
+            box(f"{col}{r + 1}", name, fil=HEAD_FILL)
+            box(f"{col}{r + 2}", span, fil=HEAD_FILL)
+        state["r"] = r + 3
 
-    def section(title):
-        r = nxt() + 1
-        state["r"] = r
-        put(ws, f"A{r}", "X", font(bold=True))
-        put(ws, f"B{r}", title, font(bold=True))
-
-    def data(key, label, values, nf=MN, scale=10**6, bold=False, indent=0):
-        r = nxt()
+    def values(key, vals, nf=MN, scale=10**6, second="diff"):
+        """기간 값 한 줄. vals = [제50기, 51기, 52기, 53기, 1Q26, (반기26, 1Q26) 또는 반기26, 1Q25, (반기25, 1Q25) 또는 반기25]"""
+        r = state["r"]
         rows[key] = r
-        put(ws, f"B{r}", label, font(bold=bold), indent=indent)
-        for p, v in zip(PERIODS, values):
-            put(ws, f"{COL[p]}{r}", literal(v, scale), font(theme=1), nf=nf)
+        half = lambda v: v[0] if isinstance(v, tuple) else v
+        cells = dict(zip("FGHIJKMN", [*vals[:5], half(vals[5]), vals[6], half(vals[7])]))
+        for col, v in cells.items():
+            box(f"{col}{r}", None if v is None else v * scale, align="right", nf=nf)
+        for col, a, b in (("L", "K", "J"), ("O", "N", "M")):
+            if second == "diff":
+                f = f"={a}{r}-{b}{r}"  # 2분기 = 반기 − 1분기
+            else:
+                f = second(col) if second else None
+            box(f"{col}{r}", f, align="right", nf=nf)
+        state["r"] = r + 1
         return r
 
-    def calc(key, label, formula, nf, bold=True, periods=PERIODS, last=False):
-        """formula(열 문자, 기간) -> 수식 문자열"""
-        r = nxt()
-        rows[key] = r
-        side = {"bottom": THIN} if last else {}
-        put(ws, f"B{r}", label, font(bold=True), **side)
-        for p in PERIODS:
-            f = formula(COL[p], p) if p in periods else None
-            put(ws, f"{COL[p]}{r}", f, font(bold=bold, theme=1), nf=nf, **side)
-        return r
+    def end_table():
+        state["r"] += 2
 
-    def ratio(key, label, num, den, **kw):
-        return calc(key, label, lambda c, p: f"={c}{rows[num]}/{c}{rows[den]}", PCT, **kw)
+    put(ws, "B2", "삼성전기 DART 공시 표 (연결 기준)", dfont(bold=True, size=12))
+    put(ws, "B3", "- 표 모양과 항목은 DART 그대로, 여러 보고서의 기간 열만 옆으로 이어 붙임. 2분기 열만 계산값 (반기 − 1분기).", dfont())
+    put(ws, "B4", "- 금액은 원 단위로 입력하고 표시만 백만원 (DART 숫자 × 1,000,000). 제50·51기는 중단사업 반영 재작성 수치.", dfont())
+    put(ws, "B5", "- 제50기의 3~5번 표(주석)는 재작성 기준 미공시라 공란.", dfont())
+    state["r"] = 7
 
-    def yoy(key, label, base, **kw):
-        return calc(key, label, lambda c, p: f"={c}{rows[base]}/{COL[PRIOR[p]]}{rows[base]}-1", PCT,
-                    periods=list(PRIOR), **kw)
-
-    def check(key, label, parts, total, periods=PERIODS):
-        return calc(key, label, lambda c, p: "=" + "+".join(f"{c}{rows[k]}" for k in parts) + f"-{c}{rows[total]}",
-                    MN1, bold=False, periods=periods)
-
-    # 머리글
-    put(ws, "A2", "X", font(bold=True))
-    put(ws, "B2", "매출 Breakdown (3개 사업부문 — 부문·수출/내수·매출유형·지역·주요 매출처·가격·생산 공시)",
-        font(size=12, bold=True))
-    put(ws, "J2", "(ref) 전년 동기 — 분기 YoY 계산용", font(size=9, italic=True, rgb=GREY))
-    put(ws, "B3", "(단위: 백만 원)", font(bold=True), bottom=DBL)
-    put(ws, "B4", "기수 (12월 결산)", font())
-    put(ws, "B5", "Source (DART)", font(size=9, italic=True, rgb=GREY))
-    for p in PERIODS:
-        c = COL[p]
-        put(ws, f"{c}3", int(p) if p.isdigit() else p, font(bold=True), align="right", bottom=DBL)
-        put(ws, f"{c}4", HEAD[p][0], font(), align="right")
-        put(ws, f"{c}5", HEAD[p][1], font(size=9, italic=True, rgb=GREY), align="right")
-    state["r"] = 4  # 다음 section()이 6행에서 시작
-
-    seg = [("comp", "컴포넌트", "수동소자: MLCC, Inductor, Chip Resistor 등"),
+    seg = [("comp", "컴포넌트", "수동소자\n(MLCC, Inductor,\nChip Resistor 등)"),
            ("pkg", "패키지솔루션", "반도체패키지기판"),
            ("opt", "광학솔루션", "카메라모듈")]
+    won = "(단위 : 백만원)"
 
-    section("1. 사업부문별 매출실적 (사업보고서 II-4 가. 매출실적)")
-    for k, name, product in seg:
-        data(f"{k}_exp", f"{name} — 수출", SALES[f"{k}_exp"], indent=1)
-        data(f"{k}_dom", f"{name} — 내수", SALES[f"{k}_dom"], indent=1)
-        data(k, f"{name} — 합계 ({product})", SALES[k], bold=True)
-    data("tot_exp", "합계 — 수출", SALES["tot_exp"], indent=1)
-    data("tot_dom", "합계 — 내수", SALES["tot_dom"], indent=1)
-    data("tot", "매출액 합계 (as disclosed)", SALES["tot"], bold=True)
-    check("chk_seg", "(check) Σ 부문 합계 − 매출액 합계", ["comp", "pkg", "opt"], "tot")
-    check("chk_exp", "(check) 수출 + 내수 − 매출액 합계", ["tot_exp", "tot_dom"], "tot")
-    for k, name, _ in seg:
-        ratio(f"mix_{k}", f"Mix: {name} (% of total)", k, "tot")
-    ratio("mix_exp", "Mix: 수출 (% of total)", "tot_exp", "tot")
-    for k, name, _ in seg:
-        yoy(f"yoy_{k}", f"YoY: {name} (%)", k)
-    yoy("yoy_tot", "YoY: 매출액 합계 (%)", "tot", last=True)
+    # 1. 매출실적
+    table("1. 매출실적 — 사업보고서 II. 사업의 내용 > 4. 매출 및 수주상황 > 가. 매출실적", won,
+          [("B", "B", "사업부문"), ("C", "C", "매출유형"), ("D", "D", "품 목"), ("E", "E", "구 분")])
+    for k, name, product in seg + [("tot", "합 계", None)]:
+        r = state["r"]
+        if product:
+            box(f"B{r}:B{r + 2}", name)
+            box(f"C{r}:C{r + 2}", "제품, 상품,\n용역, 기타매출")
+            box(f"D{r}:D{r + 2}", product)
+        else:
+            box(f"B{r}:D{r + 2}", name)
+        for suffix, label in (("_exp", "수출"), ("_dom", "내수"), ("", "합계")):
+            box(f"E{state['r']}", label)
+            values(k + suffix, SALES[k + suffix])
+    end_table()
 
-    section("2. 매출유형별 매출 — 제품·상품 / 기타(용역 등) (부문별: 연결주석 20-1, 합계: 사업보고서 II-4)")
-    for k, name, _ in seg:
-        data(f"{k}_goods", f"{name} — 제품 및 상품", TYPE[f"{k}_goods"], indent=1)
-        data(f"{k}_other", f"{name} — 기타 (용역 등)", TYPE[f"{k}_other"], indent=1)
-    data("tot_goods", "합계 — 제품/상품", TYPE["tot_goods"], bold=True)
-    data("tot_other", "합계 — 용역 및 기타매출", TYPE["tot_other"], bold=True)
-    for k, name, _ in seg:
-        check(f"chk_type_{k}", f"(check) {name} 제품·상품 + 기타 − 부문 합계 (±1 = 공시 반올림)",
-              [f"{k}_goods", f"{k}_other"], k, periods=PERIODS[1:])
-    check("chk_type", "(check) Σ 유형 − 매출액 합계", ["tot_goods", "tot_other"], "tot")
-    for k, name, _ in seg:
-        ratio(f"mix_other_{k}", f"Mix: {name} 기타 (% of 부문)", f"{k}_other", k,
-              periods=PERIODS[1:], last=(k == "opt"))
+    # 2. 매출 유형별 매출실적
+    table("2. 매출 유형별 매출실적 — 사업보고서 II-4 가. 매출실적", won, [("B", "E", "구 분")])
+    for key, label, vals in (("tot_goods", "제품/상품", TYPE["tot_goods"]), ("tot_other", "용역 및 기타매출", TYPE["tot_other"]),
+                             ("type_sum", "계", SALES["tot"])):
+        box(f"B{state['r']}:E{state['r']}", label)
+        values(key, vals)
+    end_table()
 
-    section("3. 지역별 매출 — 전사 기준 (연결주석 3. 영업부문정보 > 지역에 대한 공시, 부문별 지역 매출은 미공시)")
-    regions = [("kr_dom", "국내 — 내수"), ("kr_exp", "국내 — 수출"), ("cn", "중국"), ("sea", "동남아"),
-               ("am", "미주"), ("eu", "유럽"), ("jp", "일본")]
-    for k, name in regions:
-        data(k, name, REGION[k])
-    check("chk_region", "(check) Σ 지역 − 매출액 합계", [k for k, _ in regions], "tot",
-          periods=PERIODS[1:])
-    for k, name in regions:
-        ratio(f"mix_{k}", f"Mix: {name} (% of total)", k, "tot", periods=PERIODS[1:], last=(k == "jp"))
+    # 3. 부문별 수익 구분
+    table("3. 고객과의 계약에서 생기는 수익의 구분 (부문별) — 연결재무제표 주석 20-1", won,
+          [("B", "B", "사업부문"), ("C", "E", "구 분")])
+    for k, name, _ in seg + [("tot", "부문 합계", None)]:
+        r = state["r"]
+        box(f"B{r}:B{r + 2}", name)
+        for key, label, vals in ((f"{k}_goods", "제품 및 상품 매출", TYPE[f"{k}_goods"]),
+                                 (f"{k}_other", "기타", TYPE[f"{k}_other"]),
+                                 (f"{k}_sum", "합계", NOTE_TOTAL if k == "tot" else TYPE[f"{k}_sum"])):
+            box(f"C{state['r']}:E{state['r']}", label)
+            values(f"note_{key}" if k == "tot" else key, [N, *vals[1:]] if k == "tot" else vals)
+    end_table()
 
-    section("4. 주요 매출처 — 삼성전자와 그 종속기업 (연결주석 3 > 주요 고객에 대한 공시, 억원 단위 공시)")
-    data("sec", "삼성전자와 그 종속기업 매출", SEC)
-    ratio("mix_sec", "Mix: 삼성전자와 그 종속기업 (% of total)", "sec", "tot", periods=PERIODS[1:], last=True)
+    # 4. 지역별 수익
+    table("4. 지역에 대한 공시 (지역별 수익, 전사 기준) — 연결재무제표 주석 3. 영업부문정보", won,
+          [("B", "B", "지 역"), ("C", "E", "구 분")])
+    r = state["r"]
+    box(f"B{r}:B{r + 1}", "국내")
+    box(f"B{r + 2}:B{r + 6}", "외국")
+    for key, label in (("kr_dom", "내수"), ("kr_exp", "수출"), ("cn", "중국"), ("sea", "동남아"), ("am", "미주"),
+                       ("eu", "유럽"), ("jp", "일본")):
+        box(f"C{state['r']}:E{state['r']}", label)
+        values(key, REGION[key])
+    box(f"B{state['r']}:E{state['r']}", "지역 합계")
+    values("region_sum", NOTE_TOTAL)
+    end_table()
 
-    section("5. 평균판매가격 변동률 — 전년 대비 (사업보고서 II-2 나. 가격변동추이, 2Q 열은 반기 누적 기준)")
-    data("asp_comp", "MLCC (컴포넌트)", ASP["comp"], nf=PCT, scale=1)
-    data("asp_pkg", "반도체패키지기판 (패키지솔루션)", ASP["pkg"], nf=PCT, scale=1)
-    data("asp_opt", "카메라모듈 (광학솔루션)", ASP["opt"], nf=PCT, scale=1)
+    # 5. 주요 고객
+    table("5. 주요 고객에 대한 공시 — 연결재무제표 주석 3. 영업부문정보 (억원 단위 공시)", won, [("B", "E", "구 분")])
+    box(f"B{state['r']}:E{state['r']}", "삼성전자와 그 종속기업 수익")
+    values("sec", SEC)
+    end_table()
 
-    section("6. 생산능력·생산실적·가동률 (사업보고서 II-3 다·라, 글로벌 완제품 기준, 공시 단위 그대로)")
-    for k, name, unit in [("comp", "컴포넌트", "억개"), ("pkg", "패키지솔루션", "천㎡"), ("opt", "광학솔루션", "백만개")]:
-        data(f"{k}_cap", f"{name} — 생산능력 ({unit})", PROD[f"{k}_cap"], nf=QTY, scale=1, indent=1)
-        data(f"{k}_out", f"{name} — 생산실적 ({unit})", PROD[f"{k}_out"], nf=QTY, scale=1, indent=1)
-        ratio(f"{k}_util", f"{name} — 가동률 (calc. = 생산실적 ÷ 생산능력)", f"{k}_out", f"{k}_cap", last=(k == "opt"))
+    # 6. 가격변동추이 (DART는 문장으로 공시)
+    table("6. 주요 제품 등의 가격변동추이 (평균판매가격, 전년 대비) — 사업보고서 II-2 나. (문장 공시, 반기는 누적 기준)",
+          "(단위 : %)", [("B", "B", "사업부문"), ("C", "E", "주요 제품")])
+    for k, name, product in (("comp", "컴포넌트", "MLCC"), ("pkg", "패키지솔루션", "반도체패키지기판"),
+                             ("opt", "광학솔루션", "카메라모듈")):
+        box(f"B{state['r']}", name)
+        box(f"C{state['r']}:E{state['r']}", product)
+        values(f"asp_{k}", ASP[k], nf=ZERO_PCT, scale=1, second=None)
+    end_table()
 
-    r = nxt() + 1
-    for i, text in enumerate([
-        "금액은 원 단위로 저장하고 표시형식으로 백만 원을 보여줌. 2Q 열 = 반기 누적 − 1분기 (셀 수식에 두 숫자 그대로).",
-        "2022·2023년은 중단사업 발생으로 재작성된 수치 (이후 보고서 기준). 2022년의 부문별 매출유형·지역·주요 매출처는 재작성 기준 미공시라 공란.",
-        "광학솔루션은 2023년 보고서까지 '광학통신솔루션'으로 표기.",
-    ]):
-        put(ws, f"A{r + i}", "-", font())
-        put(ws, f"B{r + i}", text, font())
+    # 7~9. 생산능력 / 생산실적 / 가동률
+    units = (("comp", "컴포넌트\n(억개)", "수동소자\n(MLCC, Inductor, Chip Resistor 등)"),
+             ("pkg", "패키지솔루션\n(천㎡)", "반도체패키지기판"), ("opt", "광학솔루션\n(백만개)", "카메라모듈"))
+    for n, title, suffix in ((7, "생산능력 — 사업보고서 II-3 다. 생산능력 및 산출근거 (글로벌 완제품 기준)", "_cap"),
+                             (8, "생산실적 — 사업보고서 II-3 라. (1) 생산실적 (글로벌 완제품 기준)", "_out"),
+                             (9, "평균가동률 — 사업보고서 II-3 라. (2) 가동률 (생산능력 대비 생산실적, 2분기 열은 8번 ÷ 7번)", "_util")):
+        table(f"{n}. {title}", "(단위 : 사업부문별 표기)" if n < 9 else "(단위 : %)",
+              [("B", "B", "사업부문"), ("C", "D", "품 목"), ("E", "E", "사업소")])
+        box(f"E{state['r']}:E{state['r'] + 2}", "국내 및\n해외사업장")
+        for k, name, product in units:
+            r = state["r"]
+            box(f"B{r}", name)
+            box(f"C{r}:D{r}", product)
+            ws.row_dimensions[r].height = 30
+            if n < 9:
+                values(k + suffix, PROD[k + suffix], nf=QTY, scale=1)
+            else:
+                values(k + suffix, UTIL[k], nf="0%", scale=1,
+                       second=lambda col, k=k: f"={col}{rows[k + '_out']}/{col}{rows[k + '_cap']}")
+        end_table()
     return rows
-
 
 # ───────────────────── 삼성전기_REV / 삼성전기_매출추정 공통 ─────────────────────
 YEARS = [("C", 2023, "2023"), ("D", 2024, "2024"), ("E", 2025, "2025"), ("F", "1Q26", "1Q26"),
@@ -358,11 +393,6 @@ def build_rev(wb, rows):
         line(ws, r + 2, "수출", raw_ref(rows, f"{k}_exp"), "child")
         line(ws, r + 3, "내수", raw_ref(rows, f"{k}_dom"), "child", bottom=MED if last else None)
         r += 4
-    notes = ["실적(2023~2Q26)은 전부 삼성전기_RAW 1번 표를 그대로 링크. 2023·분기 YoY의 전년 값도 RAW (분기는 전년 동기 열).",
-             "2026E~2028E는 추정 단계에서 입력."]
-    for i, text in enumerate(notes):
-        put(ws, f"A{r + 1 + i}", "-", kfont(), align="center")
-        put(ws, f"B{r + 1 + i}", text, kfont())
 
 
 def build_est(wb, rows):
@@ -385,8 +415,7 @@ def build_est(wb, rows):
             bottom = MED if j == 3 else (THIN if j == 1 else None)
             line(ws, row + 1, f"% of {name}", lambda c, p, row=row, top=top: f"={c}{row}/{c}${top}", "pct",
                  bottom=bottom)
-        notes = ["수출 + 내수 = 제품 및 상품 + 기타 = 부문 매출 (같은 매출을 DART 공시 기준 두 가지로 나눈 것).",
-                 "수출/내수: 삼성전기_RAW 1번 표, 제품 및 상품/기타: 삼성전기_RAW 2번 표."]
+        notes = ["수출 + 내수 = 제품 및 상품 + 기타 = 부문 매출 (같은 매출을 DART 공시 기준 두 가지로 나눈 것)."]
         for j, text in enumerate(notes):
             put(ws, f"A{top + 11 + j}", "-", kfont(), align="center")
             put(ws, f"B{top + 11 + j}", text, kfont())
